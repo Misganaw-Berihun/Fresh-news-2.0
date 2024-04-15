@@ -24,6 +24,7 @@ def minimal_task():
     search_for("covid")
     check_checkboxes(checkboxes)
     sort_items(SortOption.NEWEST)
+    news = get_news_lists(1)
 
 def open_browser(url):
     """
@@ -124,3 +125,69 @@ def is_date_after_or_equal_to_target(str_date, target_date):
     return date_obj >= target_date
 
 
+def get_news_lists(k: int) -> list:
+    """
+    Get a list of news articles published k months from now.
+
+    Args:
+        k (int): The number of months from now to retrieve news articles for.
+
+    Returns:
+        list: A list of news articles published k months from now.
+    """
+    news = []
+    target_date = get_k_months_before(k)
+
+    while True:
+        news_articles = browser.find_elements('xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/ul/li')
+
+        for article in news_articles:
+            news_data = extract_news_data(article)
+
+            if not is_date_after_or_equal_to_target(news_data["timestamp"], target_date):
+                return news
+
+            news.append(news_data)
+
+        try:
+            next_page = browser.click_element('xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/div[2]/div[3]/a')
+        except:
+            return news
+    
+    return news
+
+
+def extract_news_data(article):
+    """
+    Extract data from a single news article.
+
+    Args:
+        article: WebElement representing a single news article.
+
+    Returns:
+        dict: A dictionary containing extracted data from the news article.
+    """
+    title = article.find_element('xpath', ".//h3/a").text
+    timestamp = article.find_element('xpath', ".//p[@class='promo-timestamp']").text
+    description = article.find_element('xpath', ".//p[@class='promo-description']").text
+    url = article.find_element('xpath', ".//h3/a").get_attribute("href")
+    picture_filename = url.split('/')[-1].split('.')[0]
+    
+    title_search_count = len(re.findall(r'california', title, flags=re.IGNORECASE))
+    description_search_count = len(re.findall(r'california', description, flags=re.IGNORECASE))
+
+    money_pattern = r'\$\d+(\.\d+)?|\d+\s*(dollars|USD)'
+    title_contains_money = bool(re.search(money_pattern, title))
+    description_contains_money = bool(re.search(money_pattern, description))
+    contains_money = bool(title_contains_money or description_contains_money)
+
+    return {
+        "title": title,
+        "url": url,
+        "description": description,
+        "timestamp": timestamp,
+        "picture_filename": picture_filename,
+        "title_search_count": title_search_count,
+        "description_search_count": description_search_count,
+        "contains_money": contains_money
+    }
