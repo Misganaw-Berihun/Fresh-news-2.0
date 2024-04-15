@@ -25,6 +25,7 @@ def minimal_task():
     check_checkboxes(checkboxes)
     sort_items(SortOption.NEWEST)
     news = get_news_lists(1)
+    write_news_to_excel('/output/news', 'news', news)
 
 def open_browser(url):
     """
@@ -191,3 +192,33 @@ def extract_news_data(article):
         "description_search_count": description_search_count,
         "contains_money": contains_money
     }
+
+def write_news_to_excel(file_path: str, sheet_name: str, news: list) -> None:
+    """
+    Write news data to an Excel file.
+
+    Args:
+        file_path (str): The file path to save the Excel file.
+        sheet_name (str): The name of the worksheet to write the news data to.
+        news (list): A list of dictionaries containing news data.
+
+    Returns:
+        None
+    """
+    excel = Files()
+
+    excel.create_workbook(file_path) 
+    if sheet_name not in excel.list_worksheets():
+        excel.create_worksheet(sheet_name)
+    
+    excel.set_active_worksheet(sheet_name)
+    for index, item in enumerate(news, start=1):
+        if index == 1:
+            headers = list(item.keys())
+            excel.append_rows_to_worksheet(headers, header=True)
+        
+        row_values = list(item.values())
+        excel.append_rows_to_worksheet(row_values)
+    
+    excel.save_workbook()
+    excel.close_workbook()
