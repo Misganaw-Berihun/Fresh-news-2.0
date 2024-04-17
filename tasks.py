@@ -9,6 +9,7 @@ from typing import List
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import re
+import time
 
 class SortOption:
     RELEVANCY = "0"
@@ -18,14 +19,31 @@ class SortOption:
 browser = Selenium()
 URL = "https://www.latimes.com/"
 checkboxes = ["World & Nation", "California", "Business", "Technology and the Internet"]
+search_term = "covid"
+
+SEARCH_FIELD_SELECTOR = "xpath:/html/body/ps-header/header/div[2]/div[2]/form/label/input"
+SEARCH_BUTTON_SELECTOR = "xpath:/html/body/ps-header/header/div[2]/button"
+SEE_ALL_SELECTOR = "xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/aside/div/div[3]/div[1]/ps-toggler/ps-toggler/button"
+CANCEL_SUBSCRIPTION_SELECTOR = "#icon-close-greylt"
+SORT_BY_SELECTOR = "xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/div[1]/div[2]/div/label/select"
+ARTICLES_SELECTOR = "xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/ul/li"
+NEXT_PAGE_SELECTOR = "xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/div[2]/div[3]/a"
+POPUP_MODAL_SELECTOR = "//*[contains(@id, 'modality-')]"
+
 @task
-def minimal_task():
+def fresh_news():
     open_browser(URL)
-    search_for("covid")
-    check_checkboxes(checkboxes)
+    search_for(search_term)
+    time.sleep(10)
+    cancel_subscription_popup()
+    time.sleep(5)
     sort_items(SortOption.NEWEST)
+    time.sleep(5)
+    check_checkboxes(checkboxes)
+    time.sleep(5)
     news = get_news_lists(1)
-    write_news_to_excel('/output/news', 'news', news)
+    time.sleep(5)
+    write_news_to_excel('output/news.xlsx', 'news', news)
 
 def open_browser(url):
     """
@@ -36,7 +54,7 @@ def open_browser(url):
     """
     browser.open_available_browser(maximized=True)
     browser.go_to(url)
-
+    browser.wait_until_page_contains_element(SEARCH_BUTTON_SELECTOR, timeout=30)
 
 def search_for(search_str):
     """
@@ -45,12 +63,28 @@ def search_for(search_str):
     Args:
         search_str (str): The term to search for.
     """
-    search_field_selector = "xpath:/html/body/ps-header/header/div[2]/div[2]/form/label/input"
-    search_button_selector = "xpath:/html/body/ps-header/header/div[2]/button"
-    
-    browser.click_element_if_visible(search_button_selector)    
-    browser.input_text(search_field_selector, search_str)
-    browser.press_keys(search_field_selector, "ENTER")
+    browser.click_element_if_visible(SEARCH_BUTTON_SELECTOR)    
+    browser.input_text(SEARCH_FIELD_SELECTOR, search_str)
+    browser.press_keys(SEARCH_FIELD_SELECTOR, "ENTER")
+    browser.wait_until_page_contains_element(f"xpath:{POPUP_MODAL_SELECTOR}",timeout=60)
+
+
+def cancel_subscription_popup():
+    """
+    Wait for the icon with the specified selector to appear and click it.
+    """
+    try:
+        script = """
+        var shadowHost = document.querySelector("[id^='modality-']");
+        var shadowRoot = shadowHost.shadowRoot;
+        var closeButton = shadowRoot.querySelector("a[aria-label='Close']");
+        var clickEvent = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
+        closeButton.dispatchEvent(clickEvent);
+        """
+        browser.execute_javascript(script)        
+        browser.wait_until_page_contains_element(SORT_BY_SELECTOR)
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 def check_checkboxes(checkboxes: List[str]) -> None:
@@ -64,15 +98,13 @@ def check_checkboxes(checkboxes: List[str]) -> None:
     Returns:
         None
     """
-    see_all_selector = "xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/aside/div/div[3]/div[1]/ps-toggler/ps-toggler/button"
-    browser.click_element_if_visible(see_all_selector)
+    browser.click_element_if_visible(SEE_ALL_SELECTOR)
 
     for checkbox in checkboxes:
         checkbox_selector = f"xpath://span[text()='{checkbox}']/preceding-sibling::input[@type='checkbox']"
+        browser.select_checkbox(checkbox_selector)
 
-        if browser.checkbox_should_not_be_selected(checkbox_selector):
-            browser.select_checkbox(checkbox_selector)
-
+    browser.wait_until_page_contains_element(ARTICLES_SELECTOR)
 
 def sort_items(sort_option: SortOption) -> None:
     """
@@ -85,9 +117,9 @@ def sort_items(sort_option: SortOption) -> None:
     Returns:
         None
     """
-    sort_by_selector = 'xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/div[1]/div[2]/div/label/select'
-    browser.select_from_list_by_value(sort_by_selector, sort_option
-    )
+    browser.click_element_if_visible(SORT_BY_SELECTOR)
+    browser.select_from_list_by_value(SORT_BY_SELECTOR, sort_option)
+    browser.wait_until_page_contains_element(SEE_ALL_SELECTOR)
 
 
 def get_k_months_before(k):
@@ -140,18 +172,20 @@ def get_news_lists(k: int) -> list:
     target_date = get_k_months_before(k)
 
     while True:
-        news_articles = browser.find_elements('xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/ul/li')
+        news_articles = browser.find_elements(ARTICLES_SELECTOR)
 
         for article in news_articles:
             news_data = extract_news_data(article)
 
             if not is_date_after_or_equal_to_target(news_data["timestamp"], target_date):
                 return news
-
+            
             news.append(news_data)
+            time.sleep(2)
 
         try:
-            next_page = browser.click_element('xpath:/html/body/div[2]/ps-search-results-module/form/div[2]/ps-search-filters/div/main/div[2]/div[3]/a')
+            browser.wait_until_page_contains_element(NEXT_PAGE_SELECTOR)
+            next_page = browser.click_element_if_visible(NEXT_PAGE_SELECTOR)
         except:
             return news
     
@@ -174,8 +208,8 @@ def extract_news_data(article):
     url = article.find_element('xpath', ".//h3/a").get_attribute("href")
     picture_filename = url.split('/')[-1].split('.')[0]
     
-    title_search_count = len(re.findall(r'california', title, flags=re.IGNORECASE))
-    description_search_count = len(re.findall(r'california', description, flags=re.IGNORECASE))
+    title_search_count = len(re.findall(search_term, title, flags=re.IGNORECASE))
+    description_search_count = len(re.findall(search_term, description, flags=re.IGNORECASE))
 
     money_pattern = r'\$\d+(\.\d+)?|\d+\s*(dollars|USD)'
     title_contains_money = bool(re.search(money_pattern, title))
@@ -215,10 +249,10 @@ def write_news_to_excel(file_path: str, sheet_name: str, news: list) -> None:
     for index, item in enumerate(news, start=1):
         if index == 1:
             headers = list(item.keys())
-            excel.append_rows_to_worksheet(headers, header=True)
+            excel.append_rows_to_worksheet([headers], header=True)
         
         row_values = list(item.values())
-        excel.append_rows_to_worksheet(row_values)
+        excel.append_rows_to_worksheet([row_values])
     
     excel.save_workbook()
     excel.close_workbook()
