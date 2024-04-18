@@ -2,7 +2,7 @@ from robocorp.tasks import task
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
 from date_utils import get_k_months_before, is_date_after_or_equal_to_target
-
+from workitem_handler import WorkItemHandler
 import re
 import time
 
@@ -14,16 +14,27 @@ class SortOption:
 
 
 class News_Scraper:
+    """
+    A scraper class for collecting news articles from the
+    Los Angeles Times website.
+
+    This class utilizes Selenium for web scraping to search
+    for news articles based on specific search terms,
+    topics, and the number of months past. It then writes the
+    collected news information to an Excel file.
+    """
     def __init__(self):
+        """
+        Initializes the News_Scraper instance
+        """
+        handler = WorkItemHandler()
+        payload = handler.get_current_payload()
+
         self._browser = Selenium()
         self._URL = "https://www.latimes.com/"
-        self._search_term = "covid"
-        self._num_months = 1
-        self._topics = [
-            "World & Nation",
-            "California",
-            "Business",
-            "Technology and the Internet"]
+        self._search_term = payload.get("search_term")
+        self._num_months = payload.get("num_months")
+        self._topics = payload.get("topics")
         self._news = []
 
         self.SEARCH_FIELD_SELECTOR = "xpath:/html/body/ps-header/header/div[2]/div[2]/form/label/input"
@@ -38,9 +49,16 @@ class News_Scraper:
         self.EXCEL_FILE_SHEET_NAME = "news"
 
     def fresh_news(self):
+        """
+        Orchestrates the process of opening the browser, searching for news
+        articles based on the specified criteria, handling subscription
+        popups, sorting the articles, checking relevant checkboxes,
+        collecting the list of news, and finally writing the collected
+        news to an Excel file.
+        """
         self._open_browser()
         self._search_for()
-        time.sleep(5)
+        time.sleep(10)
         self._cancel_subscription_popup()
         time.sleep(3)
         self._sort_items(SortOption.NEWEST)
@@ -73,13 +91,12 @@ class News_Scraper:
         Wait for the icon with the specified selector to appear and click it.
         """
         try:
-            self._browser.wait_until_element_is_visible(self.MODAL_SELECTOR)
             script = """
             var shadowHost = document.querySelector("[id^='modality-']");
             var shadowRoot = shadowHost.shadowRoot;
-            var closeButton = shadowRoot.querySelector("a[aria-label='Close']");
+            var closeBtn = shadowRoot.querySelector("a[aria-label='Close']");
             var clickEvent = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
-            closeButton.dispatchEvent(clickEvent);
+            closeBtn.dispatchEvent(clickEvent);
             """
             self._browser.execute_javascript(script)
             self._browser.wait_until_page_contains_element(self.SORT_BY_SELECTOR)
@@ -170,7 +187,7 @@ class News_Scraper:
         if self.EXCEL_FILE_SHEET_NAME not in excel.list_worksheets():
             excel.create_worksheet(self.EXCEL_FILE_SHEET_NAME)
         excel.set_active_worksheet(self.EXCEL_FILE_SHEET_NAME)
-        for index, item in enumerate(self.news, start=1):
+        for index, item in enumerate(self._news, start=1):
             if index == 1:
                 headers = list(item.keys())
                 excel.append_rows_to_worksheet([headers], header=True)
