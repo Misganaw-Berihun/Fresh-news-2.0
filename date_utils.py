@@ -30,6 +30,9 @@ def is_date_after_or_equal_to_target(str_date, target_date):
         bool: True if the given date is after or equal to the target date,
             False otherwise.
     """
+    if str_date.lower().endswith(" ago"):
+        current_date = datetime.now()
+        return current_date >= target_date
     try:
         date_obj = datetime.strptime(str_date, '%b. %d, %Y')
     except ValueError:
