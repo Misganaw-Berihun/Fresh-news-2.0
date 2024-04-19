@@ -2,7 +2,11 @@ from robocorp.tasks import task
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
 from workitem_handler import WorkItemHandler
-
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import (
+    expected_conditions as EC
+)
 from urllib.request import (
     urlretrieve,
     urlparse,
@@ -15,8 +19,33 @@ from date_utils import (
 from pathlib import Path
 import robocorp.log as log
 import re
-import time
 import os
+import time
+
+from selenium.common.exceptions import (
+    StaleElementReferenceException
+)
+
+
+class ElementWrapper:
+    def __init__(self, browser, selector):
+        self._browser = browser
+        self._selector = selector
+        self._element = None
+
+    @property
+    def element(self):
+        if not self._element:
+            self._element = self._locate_element()
+        return self._element
+
+    def _locate_element(self):
+        try:
+            return self._browser.find_element(self._selector)
+        except StaleElementReferenceException:
+            log.warning("Stale element reference encountered."
+                        "Refreshing the element...")
+            return self._browser.find_element(self._selector)
 
 
 class SortOption:
@@ -26,19 +55,7 @@ class SortOption:
 
 
 class News_Scraper:
-    """
-    A scraper class for collecting news articles from the
-    Los Angeles Times website.
-
-    This class utilizes Selenium for web scraping to search
-    for news articles based on specific search terms,
-    topics, and the number of months past. It then writes the
-    collected news information to an Excel file.
-    """
     def __init__(self):
-        """
-        Initializes the News_Scraper instance
-        """
         handler = WorkItemHandler()
         payload = handler.get_current_payload()
 
@@ -46,7 +63,6 @@ class News_Scraper:
         self._URL = "https://www.latimes.com/"
         self._search_term = payload.get("search_term")
         self._num_months = payload.get("num_months")
-        self._topics = payload.get("topics")
         self._news = []
 
         self.SEARCH_FIELD_SELECTOR = (
@@ -55,11 +71,6 @@ class News_Scraper:
         )
         self.SEARCH_BUTTON_SELECTOR = (
             "xpath:/html/body/ps-header/header/div[2]/button"
-        )
-        self.SEE_ALL_SELECTOR = (
-            "xpath:/html/body/div[2]/ps-search-results-module/"
-            "form/div[2]/ps-search-filters/div/aside/div/div[3]"
-            "/div[1]/ps-toggler/ps-toggler/button"
         )
         self.CANCEL_SUBSCRIPTION_SELECTOR = (
             "#icon-close-greylt"
@@ -74,8 +85,7 @@ class News_Scraper:
             "form/div[2]/ps-search-filters/div/main/ul/li"
         )
         self.NEXT_PAGE_SELECTOR = (
-            "xpath:/html/body/div[2]/ps-search-results-module/"
-            "form/div[2]/ps-search-filters/div/main/div[2]/div[3]/a"
+            "xpath://div[@class='search-results-module-next-page']"
         )
         self.MODAL_SELECTOR = (
             "xpath://*[contains(@id, 'modality-')]"
@@ -86,25 +96,12 @@ class News_Scraper:
         self.EXCEL_FILE_SHEET_NAME = "news"
 
     def fresh_news(self):
-        """
-        Orchestrates the process of opening the browser, searching for news
-        articles based on the specified criteria, handling subscription
-        popups, sorting the articles, checking relevant checkboxes,
-        collecting the list of news, and finally writing the collected
-        news to an Excel file.
-        """
         try:
             self._open_browser()
             self._search_for()
-            time.sleep(3)
             self._cancel_subscription_popup()
-            time.sleep(3)
             self._sort_items(SortOption.NEWEST)
-            time.sleep(3)
-            self._check_checkboxes()
-            time.sleep(5)
             self._get_news_lists()
-            time.sleep(5)
             self._write_news_to_excel()
         except Exception as e:
             log.exception(
@@ -112,14 +109,13 @@ class News_Scraper:
             )
 
     def _open_browser(self):
-        """
-        Open the default web browser and navigate to the specified URL.
-        """
         try:
             self._browser.open_available_browser(maximized=True)
             self._browser.go_to(self._URL)
-            self._browser.wait_until_page_contains_element(
-                self.SEARCH_BUTTON_SELECTOR, timeout=30
+            WebDriverWait(self._browser.driver, 30).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, self.SEARCH_BUTTON_SELECTOR)
+                    )
             )
             log.info("Browser opened and navigated to URL successfully.")
         except Exception as e:
@@ -129,9 +125,6 @@ class News_Scraper:
             )
 
     def _search_for(self):
-        """
-        Perform a search using the provided search term.
-        """
         try:
             self._browser.click_element_if_visible(
                 self.SEARCH_BUTTON_SELECTOR
@@ -142,8 +135,10 @@ class News_Scraper:
             self._browser.press_keys(
                 self.SEARCH_FIELD_SELECTOR, "ENTER"
             )
-            self._browser.wait_until_page_contains_element(
-                self.SEE_ALL_SELECTOR, timeout=30
+            WebDriverWait(self._browser.driver, 30).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, self.SORT_BY_SELECTOR)
+                    )
             )
             log.info("Search performed successfully.")
         except Exception as e:
@@ -152,10 +147,6 @@ class News_Scraper:
             )
 
     def _cancel_subscription_popup(self):
-        """
-        Wait for the icon with the specified selector to appear
-        and click it.
-        """
         try:
             self._browser.execute_javascript(
                 "window.scrollTo(0, document.body.scrollHeight);"
@@ -174,9 +165,6 @@ class News_Scraper:
             time.sleep(1)
             self._browser.execute_javascript("window.scrollTo(0, 0);")
             self._browser.execute_javascript(script)
-            self._browser.wait_until_page_contains_element(
-                self.SORT_BY_SELECTOR
-            )
             log.info("Subscription popup closed successfully.")
         except Exception as e:
             log.exception(
@@ -185,17 +173,17 @@ class News_Scraper:
             )
 
     def _sort_items(self, sort_option):
-        """
-        Select a sorting option from the dropdown menu on the website.
-        """
         try:
             self._browser.click_element_if_visible(self.SORT_BY_SELECTOR)
             self._browser.select_from_list_by_value(
                 self.SORT_BY_SELECTOR,
                 sort_option
             )
-            self._browser.wait_until_page_contains_element(
-                self.SEE_ALL_SELECTOR
+            time.sleep(5)
+            WebDriverWait(self._browser.driver, 30).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, self.ARTICLES_SELECTOR)
+                    )
             )
             log.info("Soring items successfully.")
         except Exception as e:
@@ -203,43 +191,26 @@ class News_Scraper:
                 f"An error occurred while trying to sort items: {e}"
             )
 
-    def _check_checkboxes(self):
-        """
-        Check the checkboxes on the website based on the provided topics list.
-        """
-        try:
-            self._browser.click_element_if_visible(self.SEE_ALL_SELECTOR)
-            for checkbox in self._topics:
-                checkbox_selector = (
-                    f"xpath://span[text()='{checkbox}']/"
-                    "preceding-sibling::input[@type='checkbox']"
-                )
-                self._browser.select_checkbox(checkbox_selector)
-                time.sleep(2)
-
-            self._browser.wait_until_page_contains_element(
-                self.ARTICLES_SELECTOR
-            )
-            log.info("Checkboxes checked successfully.")
-        except Exception as e:
-            log.exception(
-                f"An error occurred while trying to check checkboxes: {e}"
-            )
-
     def _get_news_lists(self):
-        """
-        Get a list of news articles published self.num_months
-        months from now.
-        """
         try:
             target_date = get_k_months_before(self._num_months)
             while True:
-                news_articles = self._browser.find_elements(
+                articles_wrapper = ElementWrapper(
+                    self._browser,
                     self.ARTICLES_SELECTOR
+                )
+                news_articles = (
+                    articles_wrapper.element.find_elements(
+                        By.XPATH,
+                        ".//li"
+                        )
                 )
 
                 for article in news_articles:
-                    news_data = self._extract_news_data(article)
+                    article_wrapper = ElementWrapper(self._browser, article)
+                    news_data = self._extract_news_data(
+                        article_wrapper.element
+                    )
 
                     if not is_date_after_or_equal_to_target(
                             news_data["timestamp"],
@@ -249,7 +220,7 @@ class News_Scraper:
 
                     if news_data:
                         self._news.append(news_data)
-                        time.sleep(5)
+                        time.sleep(2)
 
                     self._browser.wait_until_page_contains_element(
                         self.NEXT_PAGE_SELECTOR
@@ -257,6 +228,7 @@ class News_Scraper:
                     self._browser.click_element(
                         self.NEXT_PAGE_SELECTOR
                     )
+                    time.sleep(10)
         except Exception as e:
             log.exception(
                 "An error occurred while trying to retrieve"
@@ -265,50 +237,33 @@ class News_Scraper:
             return
 
     def _download_image(self, image_url, file_name):
-        """
-        Downloads an image from the specified URL and saves it
-        to a folder named 'images'.
-
-        Args:
-            image_url (str): The URL of the image to be downloaded.
-            file_name (str): the file name of the image
-        """
         folder_path = "output/images/"
         Path(folder_path).mkdir(parents=True, exist_ok=True)
         file_path = os.path.join(folder_path, file_name)
         urlretrieve(image_url, file_path)
 
     def _extract_news_data(self, article):
-        """
-        Extract data from a single news article.
-
-        Args:
-            article: WebElement representing a single news article.
-
-        Returns:
-            dict: A dictionary containing extracted data from the news article.
-        """
         try:
             title = article.find_element(
-                'xpath', "//h3/a"
+                'xpath', ".//h3/a"
             ).text
             time.sleep(2)
             timestamp = article.find_element(
-                'xpath', "//p[@class='promo-timestamp']"
+                'xpath', ".//p[@class='promo-timestamp']"
             ).text
             time.sleep(2)
             description = article.find_element(
-                'xpath', "//p[@class='promo-description']"
+                'xpath', ".//p[@class='promo-description']"
             ).text
             time.sleep(2)
             url = article.find_element(
-                'xpath', "//h3/a"
+                'xpath', ".//h3/a"
             ).get_attribute("href")
             time.sleep(2)
             img_src = article.find_element(
-                'xpath', "//img[@class='image']"
+                'xpath', ".//img[@class='image']"
             ).get_attribute("src")
-            
+
             title_search_count = len(re.findall(
                 self._search_term, title,
                 flags=re.IGNORECASE
@@ -353,9 +308,6 @@ class News_Scraper:
             return None
 
     def _write_news_to_excel(self):
-        """
-        Write news data to an Excel file.
-        """
         try:
             excel = Files()
             excel.create_workbook(self.EXCEL_FILE_PATH)
