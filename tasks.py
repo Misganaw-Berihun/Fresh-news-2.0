@@ -2,11 +2,6 @@ from robocorp.tasks import task
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
 from workitem_handler import WorkItemHandler
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import (
-    expected_conditions as EC
-)
 from urllib.request import (
     urlretrieve,
     urlparse,
@@ -87,10 +82,8 @@ class News_Scraper:
         try:
             self._browser.open_available_browser(maximized=True)
             self._browser.go_to(self._URL)
-            WebDriverWait(self._browser.driver, 30).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, self.SEARCH_BUTTON_SELECTOR)
-                    )
+            self._browser.wait_until_page_contains_element(
+                self.SEARCH_BUTTON_SELECTOR
             )
             log.info("Browser opened and navigated to URL successfully.")
         except Exception as e:
@@ -110,10 +103,8 @@ class News_Scraper:
             self._browser.press_keys(
                 self.SEARCH_FIELD_SELECTOR, "ENTER"
             )
-            WebDriverWait(self._browser.driver, 30).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, self.SORT_BY_SELECTOR)
-                    )
+            self._browser.wait_until_page_contains_element(
+                self.SORT_BY_SELECTOR
             )
             log.info("Search performed successfully.")
         except Exception as e:
@@ -155,12 +146,10 @@ class News_Scraper:
                 sort_option
             )
             time.sleep(5)
-            WebDriverWait(self._browser.driver, 30).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, self.ARTICLES_SELECTOR)
-                    )
+            self._browser.wait_until_page_contains_element(
+                self.ARTICLES_SELECTOR
             )
-            log.info("Soring items successfully.")
+            log.info("Sorting items successfully.")
         except Exception as e:
             log.exception(
                 f"An error occurred while trying to sort items: {e}"
@@ -188,12 +177,16 @@ class News_Scraper:
                     self._news.append(news_data)    
 
                     try:
-                        self._browser.wait_until_page_contains_element(
+                        next_page_button = self._browser.find_element(
                             self.NEXT_PAGE_SELECTOR
                         )
-                        self._browser.click_element(
-                            self.NEXT_PAGE_SELECTOR
-                        )
+                        if (next_page_button and
+                            self._browser.is_element_clikable(
+                                next_page_button
+                                )):
+                            self._browser.click_element(next_page_button)
+                        else:
+                            break
                     except Exception:
                         return
         except Exception as e:
@@ -211,26 +204,26 @@ class News_Scraper:
     def _extract_news_data(self, article):
         try:
             title = article.find_element(
-                'xpath', 
-                ".//h3/a"
+                'xpath',
+                "//h3/a"
             ).text
             timestamp = article.find_element(
                 'xpath',
-                ".//p[@class='promo-timestamp']"
+                "//p[@class='promo-timestamp']"
             ).text
             description = article.find_element(
                 'xpath',
-                ".//p[@class='promo-description']"
+                "//p[@class='promo-description']"
             ).text
             url = article.find_element(
                 'xpath',
-                ".//h3/a"
+                "//h3/a"
             ).get_attribute("href")
             img_src = article.find_element(
                 'xpath',
-                ".//img[@class='image']"
+                "//img[@class='image']"
             ).get_attribute("src")
-
+           
             title_search_count = len(re.findall(
                 self._search_term, title,
                 flags=re.IGNORECASE
