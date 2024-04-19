@@ -22,31 +22,6 @@ import re
 import os
 import time
 
-from selenium.common.exceptions import (
-    StaleElementReferenceException
-)
-
-
-class ElementWrapper:
-    def __init__(self, browser, selector):
-        self._browser = browser
-        self._selector = selector
-        self._element = None
-
-    @property
-    def element(self):
-        if not self._element:
-            self._element = self._locate_element()
-        return self._element
-
-    def _locate_element(self):
-        try:
-            return self._browser.find_element(self._selector)
-        except StaleElementReferenceException:
-            log.warning("Stale element reference encountered."
-                        "Refreshing the element...")
-            return self._browser.find_element(self._selector)
-
 
 class SortOption:
     RELEVANCY = "0"
@@ -195,21 +170,13 @@ class News_Scraper:
         try:
             target_date = get_k_months_before(self._num_months)
             while True:
-                articles_wrapper = ElementWrapper(
-                    self._browser,
+                news_articles = self._browser.find_elements(
                     self.ARTICLES_SELECTOR
-                )
-                news_articles = (
-                    articles_wrapper.element.find_elements(
-                        By.XPATH,
-                        ".//li"
-                        )
                 )
 
                 for article in news_articles:
-                    article_wrapper = ElementWrapper(self._browser, article)
                     news_data = self._extract_news_data(
-                        article_wrapper.element
+                        article
                     )
 
                     if not is_date_after_or_equal_to_target(
@@ -218,23 +185,22 @@ class News_Scraper:
                     ):
                         return
 
-                    if news_data:
-                        self._news.append(news_data)
-                        time.sleep(2)
+                    self._news.append(news_data)    
 
-                    self._browser.wait_until_page_contains_element(
-                        self.NEXT_PAGE_SELECTOR
-                    )
-                    self._browser.click_element(
-                        self.NEXT_PAGE_SELECTOR
-                    )
-                    time.sleep(10)
+                    try:
+                        self._browser.wait_until_page_contains_element(
+                            self.NEXT_PAGE_SELECTOR
+                        )
+                        self._browser.click_element(
+                            self.NEXT_PAGE_SELECTOR
+                        )
+                    except Exception:
+                        return
         except Exception as e:
             log.exception(
                 "An error occurred while trying to retrieve"
                 f" news articles: {e}"
             )
-            return
 
     def _download_image(self, image_url, file_name):
         folder_path = "output/images/"
@@ -245,23 +211,24 @@ class News_Scraper:
     def _extract_news_data(self, article):
         try:
             title = article.find_element(
-                'xpath', ".//h3/a"
+                'xpath', 
+                ".//h3/a"
             ).text
-            time.sleep(2)
             timestamp = article.find_element(
-                'xpath', ".//p[@class='promo-timestamp']"
+                'xpath',
+                ".//p[@class='promo-timestamp']"
             ).text
-            time.sleep(2)
             description = article.find_element(
-                'xpath', ".//p[@class='promo-description']"
+                'xpath',
+                ".//p[@class='promo-description']"
             ).text
-            time.sleep(2)
             url = article.find_element(
-                'xpath', ".//h3/a"
+                'xpath',
+                ".//h3/a"
             ).get_attribute("href")
-            time.sleep(2)
             img_src = article.find_element(
-                'xpath', ".//img[@class='image']"
+                'xpath',
+                ".//img[@class='image']"
             ).get_attribute("src")
 
             title_search_count = len(re.findall(
