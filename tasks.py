@@ -1,11 +1,22 @@
 from robocorp.tasks import task
 from RPA.Browser.Selenium import Selenium
 from RPA.Excel.Files import Files
-from date_utils import get_k_months_before, is_date_after_or_equal_to_target
 from workitem_handler import WorkItemHandler
+
+from urllib.request import (
+    urlretrieve,
+    urlparse,
+    unquote
+)
+from date_utils import (
+    get_k_months_before,
+    is_date_after_or_equal_to_target
+)
+from pathlib import Path
 import robocorp.log as log
 import re
 import time
+import os
 
 
 class SortOption:
@@ -85,15 +96,15 @@ class News_Scraper:
         try:
             self._open_browser()
             self._search_for()
-            time.sleep(10)
+            time.sleep(3)
             self._cancel_subscription_popup()
             time.sleep(3)
             self._sort_items(SortOption.NEWEST)
             time.sleep(3)
             self._check_checkboxes()
-            time.sleep(3)
+            time.sleep(5)
             self._get_news_lists()
-            time.sleep(3)
+            time.sleep(5)
             self._write_news_to_excel()
         except Exception as e:
             log.exception(
@@ -132,7 +143,7 @@ class News_Scraper:
                 self.SEARCH_FIELD_SELECTOR, "ENTER"
             )
             self._browser.wait_until_page_contains_element(
-                self.MODAL_SELECTOR, timeout=60
+                self.SEE_ALL_SELECTOR, timeout=30
             )
             log.info("Search performed successfully.")
         except Exception as e:
@@ -146,6 +157,10 @@ class News_Scraper:
         and click it.
         """
         try:
+            self._browser.execute_javascript(
+                "window.scrollTo(0, document.body.scrollHeight);"
+            )
+            time.sleep(5)
             script = """
                 var shadowHost = document.querySelector("[id^='modality-']");
                 var shadowRoot = shadowHost.shadowRoot;
@@ -156,7 +171,8 @@ class News_Scraper:
                 );
                 closeBtn.dispatchEvent(clickEvent);
             """
-            
+            time.sleep(1)
+            self._browser.execute_javascript("window.scrollTo(0, 0);")
             self._browser.execute_javascript(script)
             self._browser.wait_until_page_contains_element(
                 self.SORT_BY_SELECTOR
@@ -199,6 +215,7 @@ class News_Scraper:
                     "preceding-sibling::input[@type='checkbox']"
                 )
                 self._browser.select_checkbox(checkbox_selector)
+                time.sleep(2)
 
             self._browser.wait_until_page_contains_element(
                 self.ARTICLES_SELECTOR
@@ -229,13 +246,15 @@ class News_Scraper:
                             target_date
                     ):
                         return
-                    self._news.append(news_data)
-                    time.sleep(2)
+
+                    if news_data:
+                        self._news.append(news_data)
+                        time.sleep(5)
 
                     self._browser.wait_until_page_contains_element(
                         self.NEXT_PAGE_SELECTOR
                     )
-                    self._browser.click_element_if_visible(
+                    self._browser.click_element(
                         self.NEXT_PAGE_SELECTOR
                     )
         except Exception as e:
@@ -244,6 +263,20 @@ class News_Scraper:
                 f" news articles: {e}"
             )
             return
+
+    def _download_image(self, image_url, file_name):
+        """
+        Downloads an image from the specified URL and saves it
+        to a folder named 'images'.
+
+        Args:
+            image_url (str): The URL of the image to be downloaded.
+            file_name (str): the file name of the image
+        """
+        folder_path = "output/images/"
+        Path(folder_path).mkdir(parents=True, exist_ok=True)
+        file_path = os.path.join(folder_path, file_name)
+        urlretrieve(image_url, file_path)
 
     def _extract_news_data(self, article):
         """
@@ -257,26 +290,37 @@ class News_Scraper:
         """
         try:
             title = article.find_element(
-                'xpath', ".//h3/a"
+                'xpath', "//h3/a"
             ).text
+            time.sleep(2)
             timestamp = article.find_element(
-                'xpath', ".//p[@class='promo-timestamp']"
+                'xpath', "//p[@class='promo-timestamp']"
             ).text
+            time.sleep(2)
             description = article.find_element(
-                'xpath', ".//p[@class='promo-description']"
+                'xpath', "//p[@class='promo-description']"
             ).text
+            time.sleep(2)
             url = article.find_element(
-                'xpath', ".//h3/a"
+                'xpath', "//h3/a"
             ).get_attribute("href")
-            picture_filename = url.split('/')[-1].split('.')[0]
+            time.sleep(2)
+            img_src = article.find_element(
+                'xpath', "//img[@class='image']"
+            ).get_attribute("src")
+            
             title_search_count = len(re.findall(
                 self._search_term, title,
                 flags=re.IGNORECASE
             ))
             description_search_count = len(re.findall(
-                self._search_term, description, 
+                self._search_term, description,
                 flags=re.IGNORECASE
             ))
+
+            decoded_src = unquote(img_src)
+            parsed_url = urlparse(decoded_src)
+            image_filename = parsed_url.query.split('/')[-1]
 
             money_pattern = r'\$\d+(\.\d+)?|\d+\s*(dollars|USD)'
             title_contains_money = bool(re.search(money_pattern, title))
@@ -289,12 +333,15 @@ class News_Scraper:
                 description_contains_money
             )
 
+            self._download_image(img_src, image_filename)
+            time.sleep(2)
+
             return {
                 "title": title,
                 "url": url,
                 "description": description,
                 "timestamp": timestamp,
-                "picture_filename": picture_filename,
+                "picture_filename": image_filename,
                 "title_search_count": title_search_count,
                 "description_search_count": description_search_count,
                 "contains_money": contains_money

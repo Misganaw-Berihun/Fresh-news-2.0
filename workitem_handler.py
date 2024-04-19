@@ -29,6 +29,7 @@ class WorkItemHandler:
         Updates the payload of the current work item with a new payload.
 
         Args:
-            new_payload (dict): The new payload to update the current work item with.
+            new_payload (dict): The new payload to update the current
+            work item with.
         """
         self.wi.outputs.create(payload=new_payload)
