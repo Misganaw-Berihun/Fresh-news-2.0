@@ -36,23 +36,19 @@ class News_Scraper:
         self._news = []
 
         self.SEARCH_FIELD_SELECTOR = (
-            "xpath:/html/body/ps-header/header/div[2]/div[2]"
-            "/form/label/input"
+            "xpath://input[@data-element='search-form-input']"
         )
         self.SEARCH_BUTTON_SELECTOR = (
-            "xpath:/html/body/ps-header/header/div[2]/button"
+            "xpath://button[@data-element='search-button']"
         )
         self.CANCEL_SUBSCRIPTION_SELECTOR = (
             "#icon-close-greylt"
         )
         self.SORT_BY_SELECTOR = (
-            "xpath:/html/body/div[2]/ps-search-results-module/"
-            "form/div[2]/ps-search-filters/div/main/div[1]/"
-            "div[2]/div/label/select"
+            "xpath://select[@class='select-input']"
         )
         self.ARTICLES_SELECTOR = (
-            "xpath:/html/body/div[2]/ps-search-results-module/"
-            "form/div[2]/ps-search-filters/div/main/ul/li"
+            "xpath://ul[@class='search-results-module-results-menu']/li"
         )
         self.NEXT_PAGE_SELECTOR = (
             "xpath://div[@class='search-results-module-next-page']"
