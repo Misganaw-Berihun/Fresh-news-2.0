@@ -107,6 +107,8 @@ class BrowserHandler:
             )
 
     def get_news_lists(self):
+        MAX_PAGES = 10
+        current_page = 1
         try:
             target_date = get_k_months_before(self._num_months)
             while True:
@@ -125,18 +127,18 @@ class BrowserHandler:
                     ):
                         return
 
-                    if news_data:
-                        self._news.append(news_data)
+                    self._news.append(news_data)
 
-                try:
-                    self._browser.wait_until_page_contains_element(
-                        Selectors.NEXT_PAGE
-                    )
-                    self._browser.click_element(
-                        Selectors.NEXT_PAGE
-                    )
-                except Exception:
-                    return
+                if current_page == MAX_PAGES:
+                    break
+
+                self._browser.wait_until_element_is_visible(
+                    Selectors.NEXT_PAGE
+                )
+                self._browser.click_element(
+                    Selectors.NEXT_PAGE
+                )
+                current_page += 1
         except Exception as e:
             log.exception(
                 "An error occurred while trying to retrieve"
@@ -147,23 +149,23 @@ class BrowserHandler:
         try:
             title = article.find_element(
                 'xpath',
-                ".//h3[@class='promo-title']/a"
+                "//h3[@class='promo-title']/a"
             ).text
             timestamp = article.find_element(
                 'xpath',
-                ".//p[@class='promo-timestamp']"
+                "//p[@class='promo-timestamp']"
             ).text
             description = article.find_element(
                 'xpath',
-                ".//p[@class='promo-description']"
+                "//p[@class='promo-description']"
             ).text
             url = article.find_element(
                 'xpath',
-                ".//h3[@class='promo-title']/a"
+                "//h3[@class='promo-title']/a"
             ).get_attribute("href")
             img_src = article.find_element(
                 'xpath',
-                ".//img[@class='image']"
+                "//img[@class='image']"
             ).get_attribute("src")
 
             title_search_count = extract_word_count(
