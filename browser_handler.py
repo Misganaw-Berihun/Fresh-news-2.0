@@ -113,7 +113,7 @@ class BrowserHandler:
                 news_articles = self._browser.find_elements(
                     Selectors.ARTICLES
                 )
-                log.info(news_articles)
+
                 for article in news_articles:
                     news_data = self._extract_news_data(
                         article
@@ -128,15 +128,15 @@ class BrowserHandler:
                     if news_data:
                         self._news.append(news_data)
 
-                    try:
-                        self._browser.wait_until_page_contains_element(
-                            Selectors.NEXT_PAGE
-                        )
-                        self._browser.click_element(
-                            Selectors.NEXT_PAGE
-                        )
-                    except Exception:
-                        return
+                try:
+                    self._browser.wait_until_page_contains_element(
+                        Selectors.NEXT_PAGE
+                    )
+                    self._browser.click_element(
+                        Selectors.NEXT_PAGE
+                    )
+                except Exception:
+                    return
         except Exception as e:
             log.exception(
                 "An error occurred while trying to retrieve"
@@ -147,7 +147,7 @@ class BrowserHandler:
         try:
             title = article.find_element(
                 'xpath',
-                ".//h3/a"
+                ".//h3[@class='promo-title']/a"
             ).text
             timestamp = article.find_element(
                 'xpath',
@@ -159,7 +159,7 @@ class BrowserHandler:
             ).text
             url = article.find_element(
                 'xpath',
-                ".//h3/a"
+                ".//h3[@class='promo-title']/a"
             ).get_attribute("href")
             img_src = article.find_element(
                 'xpath',
